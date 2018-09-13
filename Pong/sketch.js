@@ -8,7 +8,7 @@ const CANVAS_HEIGHT = 600;
 const PADDLE_WIDTH = 20;
 
 // height of the paddle
-const PADDLE_HEIGHT = 70;
+const PADDLE_HEIGHT = 80;
 
 // diameter of the ball
 const BALL_DIAMETER = 20;
@@ -23,7 +23,13 @@ const X_OF_RIGHT_PAD = CANVAS_WIDTH * 0.9 - PADDLE_WIDTH;
 const PAD_MOVE_SPEED = 10;
 
 // maximum speed the ball can travel
-const MAX_BALL_SPEED = 8;
+const MAX_BALL_SPEED = 12;
+
+function preload() {
+  hitWallSound = loadSound('pong_sounds/pong_hit_wall.mp3');
+  hitPaddleSound = loadSound('pong_sounds/pong_hit_paddle.mp3');
+  playerMissSound = loadSound('pong_sounds/pong_player_miss_ball.mp3');
+}
 
 
 function setup() {
@@ -34,32 +40,31 @@ function setup() {
 }
 
 function draw() {
-  background(0);
-  leftPaddle.draw();
-  rightPaddle.draw();
-  ball.draw();
-  drawingMidLine();
-  // if the up arrow key is pressed, then move the right paddle upwards
-  if(keyIsDown(UP_ARROW)) {
-    rightPaddle.direction(-PAD_MOVE_SPEED);
-    // if the down arrow key is pressed, then move the right paddle downwards
-  } else if(keyIsDown(DOWN_ARROW)) {
-    rightPaddle.direction(PAD_MOVE_SPEED);
+  if(numTurnsForLeftPlayer == 0 || numTurnsForRightPlayer == 0) {
+    fill(255);
+    textSize(30);
+    if(rightPlayerScore == 10) {
+      text("You Win", CANVAS_WIDTH / 2 - 60, CANVAS_HEIGHT / 2);
+    } else if (leftPlayerScore == 10) {
+      text("You Lose", CANVAS_WIDTH / 2 - 60, CANVAS_HEIGHT / 2);
+    }
+    noLoop();
   } else {
-    // if no key/other keys are pressed, do not move the right paddle
-    rightPaddle.yVel = 0;
+    background(0);
+    leftPaddle.draw();
+    rightPaddle.draw();
+    ball.draw();
+    drawingMidLine();
+    leftPaddle.computeDirection(ball.y, ball.magVelOfBall);
+    leftPaddle.move();
+    rightPaddle.move();
+    ball.update();
+    checkForCollision();
+    displayScore();
+    updateBallSpeed();
   }
-  leftPaddle.direction(yVelOfBall);
-  leftPaddle.move();
-  rightPaddle.move();
-  ball.move(xVelOfBall, yVelOfBall);
-  checkForCollision();
-  displayScore();
-  updateBallSpeed();
-
 
 }
-
 
 // function for drawing the mid line between the paddles
 function drawingMidLine() {
@@ -69,28 +74,41 @@ function drawingMidLine() {
 
 // checks if the ball has collided with the paddle or the top or bottom walls
 function checkForCollision() {
+
   if(ball.collide(leftPaddle)) {
-    if(xVelOfBall < 0) {
-      xVelOfBall *= -1;
+    // checks for the segment of the paddle which the ball has collided into
+    // and sets the angle which the ball bounces of the paddle
+    ball.checkForLeftPaddleSegment(leftPaddle);
+    if(ball.xVel < 0) {
+      ball.xVel *= -1;
     }
+    hitPaddleSound.play();
+
   } else if(ball.collide(rightPaddle)) {
-    if(xVelOfBall > 0) {
-      xVelOfBall *= -1;
+    ball.checkForRightPaddleSegment(rightPaddle);
+    if(ball.xVel > 0) {
+      ball.xVel *= -1;
     }
+    hitPaddleSound.play();
   }
 
   // if the ball hits the top or bottom walls, let the ball bounce off the walls
   if(ball.y - BALL_DIAMETER / 2 <= 0 || ball.y + BALL_DIAMETER / 2 >= CANVAS_HEIGHT) {
-    yVelOfBall *= -1;
+    ball.yVel *= -1;
+    hitWallSound.play();
   }
   // if the left player misses the ball, add the score to the right player
   if(ball.x - BALL_DIAMETER / 2 <= 0) {
     rightPlayerScore++;
     playerScored = true;
+    playerMissSound.play();
+    numTurnsForLeftPlayer--;
     // if the right player misses the ball, add the score to the left player
   } else if(ball.x + BALL_DIAMETER / 2 >= CANVAS_WIDTH) {
     leftPlayerScore++;
     playerScored = true;
+    playerMissSound.play();
+    numTurnsForRightPlayer--;
   }
   // if either player has scored, reset the ball's position to the centre of the screen
   // reset the speed of the ball to allow player to have enough time to react
@@ -98,14 +116,9 @@ function checkForCollision() {
     playerScored = false;
     ball.x = CANVAS_WIDTH / 2;
     ball.y = CANVAS_HEIGHT / 2;
-    if(random(0, 1) > 0.5) {
-      xVelOfBall = 2;
-      yVelOfBall = -2;
-    } else {
-      xVelOfBall = 2;
-      yVelOfBall = 2;
-    }
-
+    ball.magVelOfBall = 4;
+    ball.xVel = ball.magVelOfBall * cos(random(-45, 45));
+    ball.yVel = ball.magVelOfBall * sin(random(-45, 45));
   }
 }
 
@@ -120,18 +133,9 @@ function displayScore() {
 // function updates the ball speed so that it increases over time
 function updateBallSpeed() {
   if(frameCount % 100 == 0 ) {
-    if(xVelOfBall > 0 && xVelOfBall < MAX_BALL_SPEED) {
-      xVelOfBall++;
-    } else if(xVelOfBall < 0 && xVelOfBall > -MAX_BALL_SPEED) {
-      xVelOfBall--;
+    if(ball.magVelOfBall > 0 && ball.magVelOfBall < MAX_BALL_SPEED) {
+      ball.magVelOfBall++;
     }
-
-    if(yVelOfBall > 0 && yVelOfBall < MAX_BALL_SPEED) {
-      yVelOfBall++;
-    } else if(yVelOfBall < 0 && yVelOfBall > -MAX_BALL_SPEED) {
-      yVelOfBall--;
-    }
-
   }
 }
 
@@ -143,12 +147,6 @@ let rightPaddle;
 // ball object
 let ball;
 
-// x velocity of the ball
-xVelOfBall = 2;
-
-// y velocity of the ball
-yVelOfBall = 2;
-
 // score for left player
 let leftPlayerScore = 0;
 
@@ -158,8 +156,29 @@ let rightPlayerScore = 0;
 // boolean to determine if either player has scored
 let playerScored = false;
 
+// sound when ball hits the walls
+let hitWallSound;
+
+// sound when ball hits the paddles
+let hitPaddleSound;
+
+// sound when player misses the ball
+let playerMissSound;
+
+// the number of turns the left player gets
+let numTurnsForLeftPlayer = 10;
+
+// the number of turns the right player gets
+let numTurnsForRightPlayer = 10;
+
+
 // bugs to fix:
-// sound
+// sound(FIXED)
 // reseting of ball speed when ball position is reset(FIXED)
-// AI for left paddle is crap(KINDA FIXED)
-//
+// AI for left paddle is crap(FIXED)
+// Number of turns should be 10(FIXED)
+// The angle which the ball travels should be dependent on what part the paddle is hit by the ball
+// the paddle is divided into 8 different parts, and the ball would reflect of the paddle at different
+// angles based on what part the ball is hitting the paddle(FIXED)
+// Collision and reflection of the ball should occur when the edge of the ball hits the paddle,
+// and not the centre of the ball(FIXED)
